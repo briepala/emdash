@@ -22,10 +22,8 @@ async function resolveProjectBaseRef(git: GitService, detectedBaseRef: string): 
   if (!remoteName) return detectedBaseRef;
 
   try {
-    const [gitDefaultBranch, branches] = await Promise.all([
-      git.getDefaultBranch(remoteName),
-      git.getBranches(),
-    ]);
+    const gitDefaultBranch = await git.getDefaultBranch(remoteName);
+    const branches = await git.getBranches();
     return resolveBaseRefFromRemoteDefault({ detectedBaseRef, gitDefaultBranch, branches });
   } catch (error) {
     log.debug('Failed to resolve project base ref, using detected base ref', {
@@ -141,6 +139,9 @@ export async function createSshProject(params: CreateSshProjectParams): Promise<
   );
   const git = new GitService(baseSshCtx, authSshCtx, sshFs);
 
+  // Serialization of these two registration git calls helps with low MaxSessions.
+  // GitService still performs some concurrent ctx.exec internally (e.g. Promise.all
+  // in status); this is a known limitation for extremely low MaxSessions servers.
   const gitInfo = await ensureGitRepository(git, params.initGitRepository);
   const baseRef = await resolveProjectBaseRef(git, gitInfo.baseRef);
 
