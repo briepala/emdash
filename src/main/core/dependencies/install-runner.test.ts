@@ -129,8 +129,7 @@ describe('createSshInstallCommandRunner', () => {
     expect(mocks.openSsh2Pty).toHaveBeenCalledWith(
       proxy.client,
       expect.objectContaining({
-        command:
-          "'/bin/zsh' -lc 'export PATH='\\''/Users/jona/.local/bin:/opt/homebrew/bin:/usr/bin'\\''; npm install -g @anthropic-ai/claude-code'",
+        command: `"/bin/zsh" -lc "export PATH='/Users/jona/.local/bin:/opt/homebrew/bin:/usr/bin'; npm install -g @anthropic-ai/claude-code"`,
       })
     );
   });

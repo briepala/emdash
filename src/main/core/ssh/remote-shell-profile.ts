@@ -43,6 +43,21 @@ function buildRemoteShellEnvPrefix(env: Record<string, string>): string {
   return exports.length > 0 ? `${exports.join('; ')}; ` : '';
 }
 
+/**
+ * Quote an arg for passing through the remote user's login shell (which may be fish).
+ *
+ * The SSH server hands the command line to the login shell; outer double-quotes
+ * with selective escaping of ["\`$] work for both fish and POSIX shells.
+ *
+ * Assumptions / limitations (for minimal bootstrap surface):
+ * - arg is a trusted command fragment (no arbitrary/untrusted input)
+ * - only prevents unwanted expansion by the login shell; NOT a general shell escaper
+ * - intended only for the shell binary + the inner script passed to -c/-lc
+ */
+function quoteRemoteLoginShellArg(arg: string): string {
+  return `"${arg.replace(/["\\$`]/g, '\\$&')}"`;
+}
+
 function buildRemoteShellProcessEnvPrefix(env: Record<string, string>): string {
   const assignments = Object.entries(env)
     .filter(([key]) => shouldForwardEnvKey(key))
@@ -58,7 +73,7 @@ export function buildRemoteShellCommand(
 ): string {
   const shell = normalizeRemoteShell(profile.shell);
   const prefix = `${buildRemoteShellEnvPrefix(profile.env)}${buildRemoteShellEnvPrefix(env)}`;
-  return `${quoteShellArg(shell)} ${remoteShellCommandFlag(shell)} ${quoteShellArg(
+  return `${quoteRemoteLoginShellArg(shell)} ${remoteShellCommandFlag(shell)} ${quoteRemoteLoginShellArg(
     `${prefix}${command}`
   )}`;
 }
@@ -69,6 +84,10 @@ export async function captureRemoteShellProfile(client: Client): Promise<RemoteS
   return { shell, env };
 }
 
+// NOTE: These discovery commands (resolveRemoteShell, captureRemoteEnv, fallback 'env')
+// are the only remaining fish-quoting surface. They bypass quoteRemoteLoginShellArg /
+// buildRemoteShellCommand because the profile (incl. which login shell) is not yet known.
+// They use direct client.exec + simple portable strings; full quoting applies post-capture.
 async function resolveRemoteShell(client: Client): Promise<string> {
   try {
     const { stdout } = await execRaw(client, 'printf %s "$SHELL"', SHELL_TIMEOUT_MS);
