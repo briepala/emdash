@@ -198,13 +198,12 @@ export const sshController = createRPCController({
     }
 
     return new Promise((resolve, reject) => {
-      proxy!.client.sftp((err, sftp) => {
+      proxy!.sftp((err, sftp) => {
         if (err) {
           reject(new Error(`SFTP error: ${err.message}`));
           return;
         }
         sftp.readdir(remotePath, (readdirErr, list) => {
-          sftp.end();
           if (readdirErr) {
             reject(new Error(`readdir error: ${readdirErr.message}`));
             return;

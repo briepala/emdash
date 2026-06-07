@@ -8,7 +8,7 @@ import { sshConnections } from '@main/db/schema';
 import { events } from '@main/lib/events';
 import { log } from '@main/lib/logger';
 import { buildConnectConfigFromRow } from './build-connect-config';
-import { SshClientProxy } from './ssh-client-proxy';
+import { SshClientProxy, type SshClientProxyHealthReporter } from './ssh-client-proxy';
 
 // ─── Error classes ────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ interface ReconnectState {
 
 // ─── Implementation ──────────────────────────────────────────────────────────
 
-export class SshConnectionManager extends EventEmitter {
+export class SshConnectionManager extends EventEmitter implements SshClientProxyHealthReporter {
   /** One stable proxy per connection ID — survives reconnects. */
   private proxies: Map<string, SshClientProxy> = new Map();
 
@@ -202,6 +202,19 @@ export class SshConnectionManager extends EventEmitter {
     }
   }
 
+  // ─── SshClientProxyHealthReporter ────────────────────────────────────────
+
+  reportChannelError(connectionId: string, err: unknown): void {
+    log.warn('SshConnectionManager: SFTP channel error', {
+      connectionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  reportChannelRecovered(connectionId: string): void {
+    log.info('SshConnectionManager: SFTP channel recovered', { connectionId });
+  }
+
   // ─── Private ─────────────────────────────────────────────────────────────
 
   private createConnection(id: string, config: ConnectConfig): Promise<SshClientProxy> {
@@ -212,7 +225,7 @@ export class SshConnectionManager extends EventEmitter {
     });
 
     // Ensure a stable proxy exists for this ID.
-    const proxy = this.proxies.get(id) ?? new SshClientProxy();
+    const proxy = this.proxies.get(id) ?? new SshClientProxy(this, id);
     this.proxies.set(id, proxy);
 
     const client = new Client();

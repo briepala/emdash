@@ -55,8 +55,6 @@ const DEFAULT_MAX_BYTES = 200 * 1024;
  * Provides path traversal protection and proper error handling.
  */
 export class SshFileSystem implements FileSystemProvider {
-  private cachedSftp: SFTPWrapper | undefined;
-
   constructor(
     private readonly proxy: SshClientProxy,
     private readonly remotePath: string
@@ -70,15 +68,14 @@ export class SshFileSystem implements FileSystemProvider {
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
+  /**
+   * Acquire the proxy-owned SFTP wrapper.
+   * The proxy manages caching, reconnection, and lifecycle — no local cache needed.
+   */
   private getSftp(): Promise<SFTPWrapper> {
-    if (this.cachedSftp) return Promise.resolve(this.cachedSftp);
     return new Promise((resolve, reject) => {
-      this.proxy.client.sftp((err, sftp) => {
+      this.proxy.sftp((err, sftp) => {
         if (err) return reject(err);
-        this.cachedSftp = sftp;
-        sftp.on('close', () => {
-          this.cachedSftp = undefined;
-        });
         resolve(sftp);
       });
     });
@@ -94,7 +91,7 @@ export class SshFileSystem implements FileSystemProvider {
         if (err) return reject(err);
         let stdout = '';
         let stderr = '';
-        stream.on('close', (code: number | null) => {
+        stream.once('close', (code: number | null) => {
           resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: code ?? -1 });
         });
         stream.on('data', (d: Buffer) => {
@@ -103,7 +100,7 @@ export class SshFileSystem implements FileSystemProvider {
         stream.stderr.on('data', (d: Buffer) => {
           stderr += d.toString('utf-8');
         });
-        stream.on('error', reject);
+        stream.once('error', reject);
       });
     });
   }
